@@ -76,6 +76,131 @@ global.io = io;
 global.logger = logger;
 global.scrapeQueue = scrapeQueue;
 
+// Worker to process scraping jobs
+const DNBScraperStealth = require('./scraper/dnbScraperStealth');
+const ScrapingJob = require('./models/ScrapingJob');
+const CompanyResult = require('./models/CompanyResult');
+
+scrapeQueue.process('scrape', async (job) => {
+  const { jobId, url, expectedCount, proxies, options } = job.data;
+
+  logger.info(`Processing job ${jobId}: ${url}`);
+
+  try {
+    // Update job status to 'running'
+    await ScrapingJob.findOneAndUpdate(
+      { jobId },
+      { status: 'running' }
+    );
+
+    // Delete any existing results for this job
+    const deleteResult = await CompanyResult.deleteMany({ jobId });
+    logger.info(`Deleted ${deleteResult.deletedCount} company results for job ${jobId}`);
+
+    // Initialize scraper
+    const scraper = new DNBScraperStealth(url, {
+      expectedCount: expectedCount || 50,
+      proxies: proxies || [],
+      headless: options?.headless !== false,
+      minDelay: parseInt(process.env.MIN_DELAY) || 3000,
+      maxDelay: parseInt(process.env.MAX_DELAY) || 10000,
+      maxConcurrency: options?.maxConcurrency || parseInt(process.env.MAX_CONCURRENCY) || 1,
+      retryAttempts: parseInt(process.env.RETRY_ATTEMPTS) || 3,
+      maxPages: options?.maxPages || null
+    });
+
+    // Set up progress callback
+    scraper.on('progress', async (progress) => {
+      logger.info(`Job ${jobId} progress: ${progress.companiesScraped}/${progress.totalCompanies}`);
+
+      // Update database
+      await ScrapingJob.findOneAndUpdate(
+        { jobId },
+        {
+          progress: {
+            companiesScraped: progress.companiesScraped,
+            totalCompanies: progress.totalCompanies,
+            pagesProcessed: progress.pagesProcessed,
+            errors: progress.errors
+          }
+        }
+      );
+
+      // Emit to frontend
+      if (global.io) {
+        global.io.emit('scrapeProgress', {
+          jobId,
+          progress
+        });
+      }
+    });
+
+    // Run scraper
+    const results = await scraper.scrape();
+
+    // Save results to database
+    if (results && results.length > 0) {
+      const companyDocs = results.map(company => ({
+        jobId,
+        ...company
+      }));
+      await CompanyResult.insertMany(companyDocs);
+      logger.info(`Saved ${results.length} companies for job ${jobId}`);
+    }
+
+    // Mark job as completed
+    await ScrapingJob.findOneAndUpdate(
+      { jobId },
+      {
+        status: 'completed',
+        completedAt: new Date(),
+        progress: {
+          companiesScraped: results.length,
+          totalCompanies: expectedCount,
+          pagesProcessed: scraper.pagesProcessed || 0,
+          errors: scraper.errorCount || 0
+        }
+      }
+    );
+
+    // Emit completion
+    if (global.io) {
+      global.io.emit('scrapeComplete', {
+        jobId,
+        totalCompanies: results.length
+      });
+    }
+
+    logger.info(`Job ${jobId} completed successfully with ${results.length} companies`);
+    return { success: true, companiesScraped: results.length };
+
+  } catch (error) {
+    logger.error(`Job ${jobId} failed:`, error);
+
+    // Mark job as failed
+    await ScrapingJob.findOneAndUpdate(
+      { jobId },
+      {
+        status: 'failed',
+        errors: [error.message],
+        completedAt: new Date()
+      }
+    );
+
+    // Emit error
+    if (global.io) {
+      global.io.emit('scrapeError', {
+        jobId,
+        error: error.message
+      });
+    }
+
+    throw error;
+  }
+});
+
+logger.info('Bull queue worker initialized and ready to process jobs');
+
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
   logger.info(`Server running on port ${PORT}`);
