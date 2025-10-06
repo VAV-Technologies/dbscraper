@@ -54,14 +54,27 @@ mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/dnb_scrap
   useUnifiedTopology: true
 });
 
-const scrapeQueue = new Bull('scrape-queue',
-  process.env.REDIS_URL || {
+// Configure Bull queue with proper Redis settings
+let queueConfig;
+if (process.env.REDIS_URL) {
+  queueConfig = {
+    redis: {
+      port: 6379,
+      host: 'classic-tetra-19885.upstash.io',
+      password: 'AU2tAAIncDIzZmIzZDhjYjlmMTQ0ODU3YWNhMjEyYzlhMDljYjkzMnAyMTk4ODU',
+      tls: {}
+    }
+  };
+} else {
+  queueConfig = {
     redis: {
       host: process.env.REDIS_HOST || 'localhost',
       port: process.env.REDIS_PORT || 6379
     }
-  }
-);
+  };
+}
+
+const scrapeQueue = new Bull('scrape-queue', queueConfig);
 
 app.use('/api/scrape', scraperRoutes);
 
