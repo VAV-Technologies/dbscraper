@@ -93,12 +93,25 @@ function Dashboard() {
 
   const startScraping = useMutation(
     async (data) => {
+      console.log('Starting scraping with data:', data);
+      console.log('API_BASE:', API_BASE);
+      console.log('API_KEY:', API_KEY);
       const response = await axios.post(`${API_BASE}/scrape/start`, data);
+      console.log('Scraping started, response:', response.data);
       return response.data;
     },
     {
       onSuccess: (data) => {
+        console.log('Scraping job created successfully:', data);
         setCurrentJob(data.jobId);
+      },
+      onError: (error) => {
+        console.error('Error starting scraping:', error);
+        console.error('Error response:', error.response?.data);
+        setErrorSnackbar({
+          open: true,
+          message: error.response?.data?.error || error.message || 'Failed to start scraping'
+        });
       }
     }
   );
