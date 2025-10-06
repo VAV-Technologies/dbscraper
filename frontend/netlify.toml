@@ -3,7 +3,7 @@
   command = "npm run build"
 
 [build.environment]
-  REACT_APP_API_BASE = "http://185.202.236.231"
+  REACT_APP_API_BASE = "http://185.202.236.231/api"
   REACT_APP_API_KEY = "83eb59e700efe317e71f754b81b921226739c6f5206cfc989705c08d12f45204"
   CI = "false"
 
