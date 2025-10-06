@@ -38,7 +38,10 @@ const logger = winston.createLogger({
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 1000,
-  message: 'Too many requests from this IP, please try again later.'
+  message: 'Too many requests from this IP, please try again later.',
+  standardHeaders: true,
+  legacyHeaders: false,
+  trustProxy: 1 // Trust first proxy (nginx)
 });
 
 app.use(helmet());
@@ -112,7 +115,8 @@ scrapeQueue.process('scrape', async (job) => {
     logger.info(`Deleted ${deleteResult.deletedCount} company results for job ${jobId}`);
 
     // Initialize scraper
-    const scraper = new DNBScraperStealth(url, {
+    const scraper = new DNBScraperStealth({
+      url,
       expectedCount: expectedCount || 50,
       proxies: proxies || [],
       headless: options?.headless !== false,
@@ -121,32 +125,6 @@ scrapeQueue.process('scrape', async (job) => {
       maxConcurrency: options?.maxConcurrency || parseInt(process.env.MAX_CONCURRENCY) || 1,
       retryAttempts: parseInt(process.env.RETRY_ATTEMPTS) || 3,
       maxPages: options?.maxPages || null
-    });
-
-    // Set up progress callback
-    scraper.on('progress', async (progress) => {
-      logger.info(`Job ${jobId} progress: ${progress.companiesScraped}/${progress.totalCompanies}`);
-
-      // Update database
-      await ScrapingJob.findOneAndUpdate(
-        { jobId },
-        {
-          progress: {
-            companiesScraped: progress.companiesScraped,
-            totalCompanies: progress.totalCompanies,
-            pagesProcessed: progress.pagesProcessed,
-            errors: progress.errors
-          }
-        }
-      );
-
-      // Emit to frontend
-      if (global.io) {
-        global.io.emit('scrapeProgress', {
-          jobId,
-          progress
-        });
-      }
     });
 
     // Run scraper
