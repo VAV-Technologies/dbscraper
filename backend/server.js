@@ -13,6 +13,7 @@ const scraperController = require('./controllers/scraperController');
 const scraperRoutes = require('./routes/scraperRoutes');
 
 const app = express();
+app.set('trust proxy', true);
 const server = http.createServer(app);
 const io = socketIO(server, {
   cors: {
@@ -54,14 +55,7 @@ mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/dnb_scrap
 });
 
 const scrapeQueue = new Bull('scrape-queue',
-  process.env.REDIS_URL ? {
-    redis: process.env.REDIS_URL,
-    ...(process.env.REDIS_TLS === 'true' && {
-      tls: {
-        rejectUnauthorized: false
-      }
-    })
-  } : {
+  process.env.REDIS_URL || {
     redis: {
       host: process.env.REDIS_HOST || 'localhost',
       port: process.env.REDIS_PORT || 6379
