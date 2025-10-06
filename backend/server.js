@@ -124,6 +124,9 @@ scrapeQueue.process('scrape', async (job) => {
       retryAttempts: parseInt(process.env.RETRY_ATTEMPTS) || 3
     });
 
+    // Initialize browser
+    await scraper.initialize();
+
     // Run scraper
     const results = await scraper.scrapeDirectory(url, {
       jobId,
@@ -165,10 +168,23 @@ scrapeQueue.process('scrape', async (job) => {
     }
 
     logger.info(`Job ${jobId} completed successfully with ${results.length} companies`);
+
+    // Clean up browser
+    await scraper.close();
+
     return { success: true, companiesScraped: results.length };
 
   } catch (error) {
     logger.error(`Job ${jobId} failed:`, error);
+
+    // Clean up browser on error
+    if (scraper && scraper.close) {
+      try {
+        await scraper.close();
+      } catch (closeError) {
+        logger.error('Error closing scraper:', closeError);
+      }
+    }
 
     // Mark job as failed
     await ScrapingJob.findOneAndUpdate(
