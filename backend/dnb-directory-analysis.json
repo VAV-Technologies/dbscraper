@@ -1,0 +1,10 @@
+{
+  "companyListings": [],
+  "pagination": {
+    "elements": []
+  },
+  "pageStructure": {
+    "totalPotentialCards": 0,
+    "cardSelectors": []
+  }
+}
