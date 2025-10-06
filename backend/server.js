@@ -116,19 +116,20 @@ scrapeQueue.process('scrape', async (job) => {
 
     // Initialize scraper
     const scraper = new DNBScraperStealth({
-      url,
-      expectedCount: expectedCount || 50,
       proxies: proxies || [],
       headless: options?.headless !== false,
       minDelay: parseInt(process.env.MIN_DELAY) || 3000,
       maxDelay: parseInt(process.env.MAX_DELAY) || 10000,
       maxConcurrency: options?.maxConcurrency || parseInt(process.env.MAX_CONCURRENCY) || 1,
-      retryAttempts: parseInt(process.env.RETRY_ATTEMPTS) || 3,
-      maxPages: options?.maxPages || null
+      retryAttempts: parseInt(process.env.RETRY_ATTEMPTS) || 3
     });
 
     // Run scraper
-    const results = await scraper.scrape();
+    const results = await scraper.scrapeDirectory(url, {
+      jobId,
+      maxPages: options?.maxPages || null,
+      expectedCount: expectedCount || 50
+    });
 
     // Save results to database
     if (results && results.length > 0) {
